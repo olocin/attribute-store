@@ -37,6 +37,7 @@ public class AttributeStoreExtensionServiceComponent {
 
     private static Log log = LogFactory.getLog(AttributeStoreExtensionServiceComponent.class);
 
+	@SuppressWarnings({ "rawtypes", "unused" })
 	private ServiceRegistration serviceRegistration = null;
 
     private static RealmService realmService;

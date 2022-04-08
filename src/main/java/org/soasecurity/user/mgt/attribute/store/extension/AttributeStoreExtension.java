@@ -19,7 +19,7 @@ package org.soasecurity.user.mgt.attribute.store.extension;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.wso2.carbon.user.api.RealmConfiguration;
+import org.soasecurity.user.mgt.attribute.store.extension.internal.AttributeStoreExtensionServiceComponent;
 import org.wso2.carbon.user.core.UserStoreException;
 import org.wso2.carbon.user.core.UserStoreManager;
 import org.wso2.carbon.user.core.common.AbstractUserOperationEventListener;
@@ -46,62 +46,39 @@ public class AttributeStoreExtension extends AbstractUserOperationEventListener 
     }
 
     @Override
-    public boolean doPreAuthenticate(String userName, Object credential,
-                                     UserStoreManager userStoreManager) throws UserStoreException {
-
-        // just log for testing
-        log.info("doPreAuthenticate method is called before authenticating with user store");
-
-        // check for attribute user store domains.
-        String currentDomainName = UserCoreUtil.getDomainName(userStoreManager.getRealmConfiguration());
-        
-        log.info("doPreAuthenticate method...attribute user store domain: " + currentDomainName + ", username: " + userName);
-
-        if(currentDomainName.endsWith(ATTRIBUTE_STORE_POST_PREFIX)){
-        	log.warn("doPreAuthenticate method...this is Attribute User Store Domain, can not authenticate users");
-            throw new UserStoreException("This is Attribute User Store Domain, Can not authenticate users");
-        }
-
-        return true;
-    }
-
-    @Override
     public boolean doPostGetUserClaimValues(String userName, String[] claims, String profileName,
                                 Map<String, String> claimMap, UserStoreManager storeManager) throws UserStoreException {
 
         // just log for testing
-        log.info("doPostGetUserClaimValues method is called after retrieving claim using underline user store");
+        log.debug("doPostGetUserClaimValues method is called after retrieving claim using underline user store");
 
-        RealmConfiguration rc  = storeManager.getRealmConfiguration();
-        
-//        log.info("**************************************************");
-//        log.info("realm user store class: " + rc.getUserStoreClass());
-//        log.info("realm class name: " + rc.getRealmClassName());
-//        log.info("user store property domain: " + rc.getUserStoreProperty(UserCoreConstants.RealmConfig.PROPERTY_DOMAIN_NAME));
-//        log.info(storeManager.toString());
-//        log.info("**************************************************");
-        
-        String userDomainName =  UserCoreUtil.getDomainName(rc);
+        String userDomainName =  UserCoreUtil.getDomainName(storeManager.getRealmConfiguration());
+        if(userDomainName.endsWith(ATTRIBUTE_STORE_POST_PREFIX)){
+        	// the user store is an attribute user store, exit
+        	return true;
+        }
         String attributeStoreDomain =  userDomainName + ATTRIBUTE_STORE_POST_PREFIX;
         
-        log.info("doPostGetUserClaimValues method...attribute user store: " + attributeStoreDomain + ", username: " + userName);
-        log.info(String.format("doPostGetUserClaimValues method...claims (%s) for user [%s] and profile name [%s]", Arrays.toString(claims), userName, profileName));
+        log.debug(String.format("doPostGetUserClaimValues method...getting claims [%s] for user [%s] and profile name [%s] in attribute user store [%s]", Arrays.toString(claims), userName, profileName, attributeStoreDomain));
         
-        UserStoreManager userStoreManager = storeManager.getSecondaryUserStoreManager(attributeStoreDomain);
-        
+        // get user store manager for related attribute user store
+        UserStoreManager userStoreManager = AttributeStoreExtensionServiceComponent.getRealmService().getBootstrapRealm().getUserStoreManager().getSecondaryUserStoreManager(attributeStoreDomain);
         
         if(userStoreManager != null) {
-
-            Map<String, String> newClaimMap = userStoreManager.getUserClaimValues(userName, claims, profileName);
-            
-            log.info("doPostGetUserClaimValues method...adding claims");
-
-            claimMap.putAll(newClaimMap);
+        	if(userStoreManager.isExistingUser(userName)) {
+        		log.debug("doPostGetUserClaimValues method...adding claims");
+	            Map<String, String> newClaimMap = userStoreManager.getUserClaimValues(userName, claims, profileName);
+	            if(newClaimMap != null) {
+	            	claimMap.putAll(newClaimMap);
+	            } else {
+	            	log.debug(String.format("doPostGetUserClaimValues method...claims map is null for user [%s] in attribute user store [%s]", userName, attributeStoreDomain));
+				}
+        	} else {
+        		log.debug(String.format("doPostGetUserClaimValues method...user [%s] does not exist in attribute user store [%s]", userName, attributeStoreDomain));
+        	}
         } else {
-        	log.warn("doPostGetUserClaimValues method...attribute user store is null");
+        	log.debug(String.format("doPostGetUserClaimValues method...attribute user store [%s] is null", attributeStoreDomain));
         }
-
         return true;
     }
-
 }
